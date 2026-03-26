@@ -6,19 +6,30 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import com.example.uwbblegateway.ui.theme.UwbBleGatewayAppTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            UwbBleGatewayAppTheme {
+            MaterialTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    MainScreen()
+                    var loggedInUser by remember { mutableStateOf<String?>(null) }
+
+                    if (loggedInUser == null) {
+                        LoginScreen(onLoginSuccess = { username ->
+                            loggedInUser = username
+                        })
+                    } else {
+                        MainScreen(username = loggedInUser!!)
+                    }
                 }
             }
         }

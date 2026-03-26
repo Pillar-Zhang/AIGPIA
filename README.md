@@ -1,31 +1,27 @@
-# UWB-BLE Gateway App — Xiaomi 14 Pro Ready
+# UwbBleGatewayApp (全栈射频定位项目)
 
-A production-ready Android starter for BLE + UWB + 4G/5G communication.
+此项目是一个集成了 Android 应用客户端、Node.js 模拟数据云端，以及预留前端管理平台的全栈 Monorepo 仓库。
 
-## ✅ Features
-- BLE scanning & device discovery (Android 12+)
-- UWB ranging (Android 13+ Tiramisu, Xiaomi 14 Pro supported)
-- Retrofit + OkHttp with auth, retry & network change detection
-- Local Express mock server (`npm run dev`) for quick testing
+## 目录结构
+* `/android`: 原生 Android 客户端源码 (包含 UWB/BLE 测试采集App)
+* `/server`: Node.js 基于 Express 的后台云端服务 (接受设备数据上传及提供下发)
+* `/front`: [预留开发] Web或大屏数据展示大屏前端项目
+* `/docs`: 需求设计、REST API 对接规范文档
 
-## 📱 Xiaomi UWB Setup Required
-1. Enable **Developer Options** → **USB Debugging**
-2. In **Settings > Connected devices > UWB**, turn ON & grant permissions
-3. Register app in [Xiaomi Developer Portal](https://dev.mi.com/console/appservice) for UWB certificate (free)
+## 启动指南
 
-## ▶️ How to Run
-### Android App
-- Open `UwbBleGatewayApp/` in **Android Studio Giraffe+**
-- Select **Xiaomi 14 Pro (API 34)** or emulator with Play Store
-- Click ▶️ Run
-
-### Mock Server
+### 1. 启动 Backend (Node.js)
 ```bash
-$ cd UwbBleGatewayApp
-$ npm install
-$ npm run dev
+cd server
+npm install
+npm run dev
 ```
-→ Server runs on `http://localhost:3001`
 
-## 📄 License
-MIT — free to use, modify, ship.
+### 2. 启动 Android App
+使用 Android Studio 直接打开 `android` 目录，或者在命令行中进入 `android` 目录并运行：
+```bash
+cd android
+./gradlew installDebug
+```
+
+# AIGPIA

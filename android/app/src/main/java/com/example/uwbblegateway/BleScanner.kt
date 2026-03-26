@@ -10,31 +10,32 @@ import android.content.pm.PackageManager
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.channels.awaitClose
 
 class BleScanner(private val context: Context) {
     private val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
     private val scanner: BluetoothLeScanner? = bluetoothAdapter?.bluetoothLeScanner
 
-    fun startScan(): Flow<ScanResult> = flow {
+    fun startScan(): Flow<ScanResult> = callbackFlow {
         if (!isPermissionsGranted()) {
-            throw SecurityException("Missing BLE permissions")
+            close(SecurityException("Missing BLE permissions"))
+            return@callbackFlow
         }
         if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled) {
-            throw IllegalStateException("Bluetooth is disabled")
+            close(IllegalStateException("Bluetooth is disabled"))
+            return@callbackFlow
         }
 
         val callback = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
-                emit(result)
+                trySend(result)
             }
         }
 
         scanner?.startScan(callback)
-        try {
-            // Emit a dummy result for demo
-            emit(ScanResult(null, null, 0, byteArrayOf(), 0, 0.0))
-        } finally {
+
+        awaitClose {
             scanner?.stopScan(callback)
         }
     }

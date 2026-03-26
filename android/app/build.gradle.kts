@@ -22,7 +22,7 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file("debug.keystore")
+            storeFile = file("../debug.keystore")
             storePassword = "android"
             keyAlias = "androiddebugkey"
             keyPassword = "android"
@@ -51,7 +51,7 @@ android {
         compose = true
     }
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.1"
+        kotlinCompilerExtensionVersion = "1.5.14"
     }
     packaging {
         resources {
@@ -61,15 +61,14 @@ android {
 }
 
 dependencies {
-    implementation(project(":app"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.viewmodel)
     implementation(libs.androidx.lifecycle.runtime)
     implementation(libs.androidx.activity.compose)
     implementation(libs.bundles.compose)
     implementation(libs.bundles.retrofit)
-    implementation("androidx.bluetooth:bluetooth-ble:1.0.0-alpha04")
-    implementation("androidx.uwb:uwb:1.0.0-alpha05")
+    implementation("androidx.bluetooth:bluetooth:1.0.0-alpha02")
+    implementation("androidx.core.uwb:uwb:1.0.0-alpha08")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")

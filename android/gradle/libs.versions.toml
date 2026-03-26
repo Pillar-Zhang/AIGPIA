@@ -1,5 +1,5 @@
 [versions]
-agp = "8.4.0"
+agp = "8.13.2"
 kotlin = "1.9.24"
 compose-ui = "1.6.0"
 compose-material3 = "1.2.1"
@@ -25,3 +25,7 @@ okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor",
 [bundles]
 compose = ["compose-ui", "compose-ui-tooling", "compose-material3"]
 retrofit = ["retrofit-core", "retrofit-converter", "okhttp-logging"]
+
+[plugins]
+androidApplication = { id = "com.android.application", version.ref = "agp" }
+jetbrainsKotlinAndroid = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
