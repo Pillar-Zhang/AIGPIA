@@ -1,0 +1,46 @@
+# Android
+.gradle/
+local.properties
+.DS_Store
+.idea/
+*.iml
+*.hprof
+*.apk
+*.ap_
+*.aab
+*.jar
+*.class
+**/build/
+**/outputs/
+**/release/
+**/test-results/
+**/mockable-android.jar
+**/androidTest/
+**/captures/
+**/logs/
+**/externalNativeBuild/
+**/cmake/
+**/ndk/
+**/CMakeFiles/
+**/build/
+**/generated/
+**/intermediates/
+**/obj/
+**/tmp/
+**/kotlin/
+**/javac/
+
+# Node
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# Misc
+.DS_Store
+*.log
+.env
+.vercel/
+.vercel/*
