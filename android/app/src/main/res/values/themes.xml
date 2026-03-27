@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.UwbBleGateway" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- Primary brand color. -->
+        <item name="android:colorPrimary">@color/purple_500</item>
+        <item name="android:colorSecondary">@color/teal_200</item>
+        <!-- Status bar color. -->
+        <item name="android:statusBarColor">@color/purple_700</item>
+        <!-- Customize your theme here. -->
+    </style>
+</resources>

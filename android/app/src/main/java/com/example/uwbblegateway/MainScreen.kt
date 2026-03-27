@@ -18,7 +18,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,84 +28,54 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import androidx.lifecycle.viewmodel.compose.viewModel
 import java.util.Locale
-import kotlin.random.Random
 
 private const val TAG = "AI-Glasses-Helper"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(username: String) {
+fun MainScreen(
+    username: String,
+    mainViewModel: MainViewModel = viewModel()
+) {
     val context = LocalContext.current
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("连接管理", "BLE 扫描", "UWB 测距", "AI 眼镜", "数据统计")
+    val tabs = listOf("连接管理", "BLE 扫描", "UWB 测距", "AI 眼镜", "数据统计", "定位地图", "AI 识别", "巡检任务")
 
-    // 核心连接状态
-    var pmsConnected by remember { mutableStateOf(false) }
-    var bleConnected by remember { mutableStateOf(false) }
-    var uwbConnected by remember { mutableStateOf(false) }
+    // 从 ViewModel 收集状态
+    val connectionState by mainViewModel.connectionState.collectAsState()
+    val bleScanState by mainViewModel.bleScanState.collectAsState()
+    val uwbState by mainViewModel.uwbState.collectAsState()
+    val glassesData by mainViewModel.bleManager.glassesState.collectAsState()
 
-    val bleManager = remember { BleManager(context) }
-    val glassesData by bleManager.glassesState.collectAsState()
-
-    // 模拟数据状态
-    var isBleScanning by remember { mutableStateOf(false) }
-    val bleDevices = remember { mutableStateListOf<BleDeviceMock>() }
-    var isUwbRanging by remember { mutableStateOf(false) }
-    var uwbDistance by remember { mutableDoubleStateOf(0.0) }
-    var uwbAoa by remember { mutableIntStateOf(0) }
-    var uwbLastTimestamp by remember { mutableLongStateOf(System.currentTimeMillis()) }
-
-    val apiService = remember { ApiService.create() }
-    val scope = rememberCoroutineScope()
-
-    // --- 权限处理逻辑 ---
+    // 权限处理
     val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            bleManager.connect("AA:BB:CC:DD:EE:FF")
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val allGranted = permissions.values.all { it }
+        if (allGranted) {
+            mainViewModel.bleManager.connect("AA:BB:CC:DD:EE:FF")
         }
     }
 
     fun requestBluetoothAndConnect() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
-                bleManager.connect("AA:BB:CC:DD:EE:FF")
-            } else {
-                bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
-            }
+        val required = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            arrayOf(
+                Manifest.permission.BLUETOOTH_CONNECT,
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            )
         } else {
-            bleManager.connect("AA:BB:CC:DD:EE:FF")
+            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
         }
-    }
-
-    // 持续运行逻辑 (模拟数据)
-    LaunchedEffect(isBleScanning) {
-        if (isBleScanning) {
-            while (isBleScanning) {
-                if (bleDevices.size < 15) {
-                    bleDevices.add(BleDeviceMock(
-                        "UWB-Tag-${Random.nextInt(10, 99)}",
-                        "AA:BB:CC:DD:EE:${Random.nextInt(10, 99)}",
-                        Random.nextInt(-90, -40)
-                    ))
-                }
-                delay(1500)
-            }
+        val allGranted = required.all {
+            ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
         }
-    }
-
-    LaunchedEffect(isUwbRanging) {
-        if (isUwbRanging) {
-            while (isUwbRanging) {
-                uwbDistance = 2.0 + Random.nextDouble() * 5.0
-                uwbAoa = Random.nextInt(-30, 30)
-                uwbLastTimestamp = System.currentTimeMillis()
-                delay(100)
-            }
+        if (allGranted) {
+            mainViewModel.bleManager.connect("AA:BB:CC:DD:EE:FF")
+        } else {
+            bluetoothPermissionLauncher.launch(required)
         }
     }
 
@@ -118,8 +87,16 @@ fun MainScreen(username: String) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("AI 眼镜电力助手", fontWeight = FontWeight.Bold)
                             Spacer(modifier = Modifier.weight(1f))
-                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 16.dp)) {
-                                Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(end = 16.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.AccountCircle,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(username, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
                             }
@@ -127,9 +104,9 @@ fun MainScreen(username: String) {
                     }
                 )
                 StatusIndicatorBar(
-                    pms = pmsConnected, 
-                    ble = bleConnected, 
-                    uwb = uwbConnected, 
+                    pms = connectionState.pmsConnected,
+                    ble = connectionState.bleConnected,
+                    uwb = connectionState.uwbConnected,
                     glassesState = glassesData.status
                 )
             }
@@ -139,11 +116,19 @@ fun MainScreen(username: String) {
             ScrollableTabRow(selectedTabIndex = selectedTab, edgePadding = 16.dp) {
                 tabs.forEachIndexed { index, title ->
                     Tab(
-                        text = { 
+                        text = {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(title, fontSize = 11.sp)
-                                if ((index == 1 && isBleScanning) || (index == 2 && isUwbRanging)) {
-                                    Box(modifier = Modifier.size(4.dp).clip(CircleShape).background(Color(0xFF4CAF50)))
+                                // 活动状态指示点
+                                if ((index == 1 && bleScanState.isScanning) ||
+                                    (index == 2 && uwbState.isRanging)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(4.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFF4CAF50))
+                                    )
                                 }
                             }
                         },
@@ -155,70 +140,70 @@ fun MainScreen(username: String) {
 
             when (selectedTab) {
                 0 -> ConnectionPanel(
-                    pmsConnected = pmsConnected,
-                    bleConnected = bleConnected,
-                    uwbConnected = uwbConnected,
+                    pmsConnected = connectionState.pmsConnected,
+                    bleConnected = connectionState.bleConnected,
+                    uwbConnected = connectionState.uwbConnected,
                     glassesData = glassesData,
-                    onConnectPms = {
-                        scope.launch {
-                            try {
-                                val result = apiService.connectPms()
-                                val statusVal = (result["status"] ?: result["code"]) as? Number
-                                pmsConnected = statusVal?.toInt() == 1
-                            } catch (e: Exception) { pmsConnected = false }
-                        }
-                    },
-                    onConnectBle = {
-                        scope.launch {
-                            try {
-                                val result = apiService.connectBle()
-                                val statusVal = (result["status"] ?: result["code"]) as? Number
-                                bleConnected = statusVal?.toInt() == 1
-                            } catch (e: Exception) { bleConnected = false }
-                        }
-                    },
-                    onConnectUwb = {
-                        scope.launch {
-                            try {
-                                val result = apiService.connectUwb()
-                                val statusVal = (result["status"] ?: result["code"]) as? Number
-                                uwbConnected = statusVal?.toInt() == 1
-                            } catch (e: Exception) { uwbConnected = false }
-                        }
-                    },
+                    onConnectPms = { mainViewModel.connectPms() },
+                    onConnectBle = { mainViewModel.connectBle() },
+                    onConnectUwb = { mainViewModel.connectUwb() },
                     onConnectGlassesReal = {
-                        if (glassesData.status == BleManager.DeviceStatus.DISCONNECTED || glassesData.status == BleManager.DeviceStatus.ERROR) {
+                        if (glassesData.status == BleManager.DeviceStatus.DISCONNECTED ||
+                            glassesData.status == BleManager.DeviceStatus.ERROR
+                        ) {
                             requestBluetoothAndConnect()
                         } else {
-                            bleManager.disconnect()
+                            mainViewModel.bleManager.disconnect()
                         }
                     },
                     onConnectGlassesMock = {
-                        if (glassesData.status == BleManager.DeviceStatus.DISCONNECTED || glassesData.status == BleManager.DeviceStatus.ERROR) {
-                            bleManager.connectMock()
+                        if (glassesData.status == BleManager.DeviceStatus.DISCONNECTED ||
+                            glassesData.status == BleManager.DeviceStatus.ERROR
+                        ) {
+                            mainViewModel.bleManager.connectMock()
                         } else {
-                            bleManager.disconnect()
+                            mainViewModel.bleManager.disconnect()
                         }
                     }
                 )
-                1 -> BleScanTab(isScanning = isBleScanning, devices = bleDevices, canTest = bleConnected && uwbConnected, onToggleScan = { isBleScanning = !isBleScanning })
-                2 -> UwbRangingTab(isRanging = isUwbRanging, distance = uwbDistance, aoa = uwbAoa, canTest = bleConnected && uwbConnected, onToggleRanging = { isUwbRanging = !isUwbRanging })
+                1 -> BleScanTab(
+                    isScanning = bleScanState.isScanning,
+                    devices = bleScanState.devices,
+                    canScan = true, // 扫描不强制要求后台连接
+                    onToggleScan = { mainViewModel.toggleBleScan() }
+                )
+                2 -> UwbRangingTab(
+                    uwbState = uwbState,
+                    canTest = connectionState.bleConnected && connectionState.uwbConnected,
+                    onToggleRanging = { mainViewModel.toggleUwbRanging() }
+                )
                 3 -> AiGlassesTab(glassesData = glassesData)
-                4 -> DataStatisticsTab(apiService, glassesData)
+                4 -> DataStatisticsTab(
+                    glassesData = glassesData,
+                    uwbState = uwbState,
+                    onUploadReport = { mainViewModel.uploadFusionReport(glassesData) }
+                )
+                5 -> MapScreen(bleManager = mainViewModel.bleManager)
+                6 -> AiScreen(bleManager = mainViewModel.bleManager)
+                7 -> InspectionListScreen()
             }
         }
     }
 }
 
+// ─── AI 眼镜 Tab ──────────────────────────────────────────────────────────────
+
 @Composable
 fun AiGlassesTab(glassesData: BleManager.GlassesData) {
     val isConnected = glassesData.status == BleManager.DeviceStatus.READY
-    
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
         Text("AI 眼镜实时视频流", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(16.dp))
-        
-        // 视频播放器区域占位
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -229,7 +214,6 @@ fun AiGlassesTab(glassesData: BleManager.GlassesData) {
             contentAlignment = Alignment.Center
         ) {
             if (isConnected) {
-                // 使用纯原生 Compose Image + 轮询拉取的方式，100% 避开 WebView 的各种安全和黑屏拦截！
                 var imageBitmap by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
                 var frameError by remember { mutableStateOf<String?>(null) }
 
@@ -277,10 +261,15 @@ fun AiGlassesTab(glassesData: BleManager.GlassesData) {
                         }
                     }
                 }
-                
-                // 模拟 AI 识别框
+
+                // 模拟 AI 识别框（Phase 3 替換为真实推理结果）
                 Box(modifier = Modifier.fillMaxSize()) {
-                    Box(modifier = Modifier.offset(x = 40.dp, y = 50.dp).size(80.dp).border(2.dp, Color.Cyan, RoundedCornerShape(4.dp))) {
+                    Box(
+                        modifier = Modifier
+                            .offset(x = 40.dp, y = 50.dp)
+                            .size(80.dp)
+                            .border(2.dp, Color.Cyan, RoundedCornerShape(4.dp))
+                    ) {
                         Text("电力变压器", color = Color.Cyan, fontSize = 10.sp, modifier = Modifier.padding(2.dp))
                     }
                 }
@@ -292,17 +281,17 @@ fun AiGlassesTab(glassesData: BleManager.GlassesData) {
                 }
             }
         }
-        
+
         Spacer(modifier = Modifier.height(24.dp))
-        
+
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            InfoBox(label = "帧率", value = if (isConnected) "30 FPS" else "--")
-            InfoBox(label = "延迟", value = if (isConnected) "45 ms" else "--")
+            InfoBox(label = "帧率", value = if (isConnected) "20 FPS" else "--")
+            InfoBox(label = "延迟", value = if (isConnected) "50 ms" else "--")
             InfoBox(label = "分辨率", value = if (isConnected) "1920x1080" else "--")
         }
-        
+
         Spacer(modifier = Modifier.height(24.dp))
-        
+
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("眼镜端传感器数据", fontWeight = FontWeight.Bold)
@@ -310,10 +299,12 @@ fun AiGlassesTab(glassesData: BleManager.GlassesData) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("IMU 姿态:", fontSize = 12.sp)
                     val imuText = if (isConnected) {
-                        String.format(java.util.Locale.US, "P: %.1f° Y: %.1f° R: %.1f°", glassesData.pitch, glassesData.yaw, glassesData.roll)
-                    } else {
-                        "N/A"
-                    }
+                        String.format(
+                            Locale.US,
+                            "P: %.1f° Y: %.1f° R: %.1f°",
+                            glassesData.pitch, glassesData.yaw, glassesData.roll
+                        )
+                    } else "N/A"
                     Text(imuText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
                 Row(modifier = Modifier.padding(top = 4.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -325,64 +316,64 @@ fun AiGlassesTab(glassesData: BleManager.GlassesData) {
     }
 }
 
+// ─── 数据统计 Tab ─────────────────────────────────────────────────────────────
+
 @Composable
-fun DataStatisticsTab(apiService: ApiService, glassesData: BleManager.GlassesData) {
-    val scope = rememberCoroutineScope()
-    
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+fun DataStatisticsTab(
+    glassesData: BleManager.GlassesData,
+    uwbState: UwbState,
+    onUploadReport: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         Text("测试数据统计分析", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        
-        StatisticCard(label = "平均测距误差", value = "0.08 m", color = Color(0xFF4CAF50))
-        StatisticCard(label = "测距成功率", value = "98.5%", color = Color(0xFF4CAF50))
-        
-        // 新增 AI 眼镜统计
-        StatisticCard(label = "眼镜连接稳定性", value = if (glassesData.status == BleManager.DeviceStatus.READY) "优秀" else "待测试", color = Color(0xFF2196F3))
-        StatisticCard(label = "眼镜实时电量", value = "${glassesData.battery}%", color = if (glassesData.battery > 20) Color(0xFF4CAF50) else Color.Red)
-        
+
+        // UWB 统计
+        val distanceText = if (uwbState.isRanging) {
+            String.format(Locale.US, "%.2f m%s", uwbState.distanceMeters, if (uwbState.isSimulated) " [模拟]" else "")
+        } else "--"
+        StatisticCard(label = "UWB 实时距离", value = distanceText, color = Color(0xFF2196F3))
+        StatisticCard(
+            label = "UWB 方位角",
+            value = if (uwbState.isRanging) String.format(Locale.US, "%.1f°", uwbState.azimuthDegrees) else "--",
+            color = Color(0xFF2196F3)
+        )
+
+        // 眼镜统计
+        StatisticCard(
+            label = "眼镜连接状态",
+            value = if (glassesData.status == BleManager.DeviceStatus.READY) "已就绪" else "待连接",
+            color = Color(0xFF4CAF50)
+        )
+        StatisticCard(
+            label = "眼镜实时电量",
+            value = "${glassesData.battery}%",
+            color = if (glassesData.battery > 20) Color(0xFF4CAF50) else Color.Red
+        )
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         FilledTonalButton(
-            onClick = { 
-                val currentTimestamp = System.currentTimeMillis()
-                scope.launch {
-                    try {
-                        val fusionData = mapOf(
-                            "test_id" to "TEST_$currentTimestamp",
-                            "test_type" to "full_system_test",
-                            "environment" to "indoor_substation",
-                            "glasses_info" to mapOf(
-                                "device_name" to (glassesData.deviceName ?: "Unknown"),
-                                "battery" to glassesData.battery,
-                                "status" to glassesData.status.name
-                            ),
-                            "fusion_result" to mapOf(
-                                "fused_distance_m" to 4.98,
-                                "confidence" to 0.95
-                            ),
-                            "timestamp" to currentTimestamp
-                        )
-                        apiService.uploadFusionTestData(fusionData)
-                        Log.d(TAG, "Full system data synchronized to backend.")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to sync data: ${e.message}")
-                    }
-                }
-            }, 
+            onClick = onUploadReport,
             modifier = Modifier.fillMaxWidth().height(50.dp)
         ) {
             Icon(Icons.Default.Share, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
             Text("导出全系统报告 (同步至后台)")
         }
-        
+
         Text(
-            "提示：报告将包含 UWB 测距、BLE 扫描及 AI 眼镜传感器融合数据",
+            "提示：报告将包含 UWB 测距（${if (uwbState.isSimulated) "模拟数据" else "真实数据"}）及 AI 眼镜传感器融合数据",
             style = MaterialTheme.typography.bodySmall,
             color = Color.Gray,
             modifier = Modifier.padding(top = 8.dp)
         )
     }
 }
+
+// ─── 状态栏 ───────────────────────────────────────────────────────────────────
 
 @Composable
 fun StatusIndicatorBar(pms: Boolean, ble: Boolean, uwb: Boolean, glassesState: BleManager.DeviceStatus) {
@@ -397,14 +388,15 @@ fun StatusIndicatorBar(pms: Boolean, ble: Boolean, uwb: Boolean, glassesState: B
         StatusItem(label = "PMS", connected = pms)
         StatusItem(label = "BLE", connected = ble)
         StatusItem(label = "UWB", connected = uwb)
-        
+
         val glassesLabel = when (glassesState) {
             BleManager.DeviceStatus.CONNECTING -> "连接中..."
             BleManager.DeviceStatus.READY -> "眼镜(就绪)"
             BleManager.DeviceStatus.ERROR -> "眼镜(故障)"
             else -> "眼镜"
         }
-        val isGlassesActive = glassesState == BleManager.DeviceStatus.CONNECTED || glassesState == BleManager.DeviceStatus.READY
+        val isGlassesActive = glassesState == BleManager.DeviceStatus.CONNECTED ||
+                glassesState == BleManager.DeviceStatus.READY
         StatusItem(label = glassesLabel, connected = isGlassesActive, specialStatus = glassesState)
     }
 }
@@ -424,6 +416,8 @@ fun StatusItem(label: String, connected: Boolean, specialStatus: BleManager.Devi
     }
 }
 
+// ─── 连接管理 Tab ─────────────────────────────────────────────────────────────
+
 @Composable
 fun ConnectionPanel(
     pmsConnected: Boolean,
@@ -436,7 +430,10 @@ fun ConnectionPanel(
     onConnectGlassesReal: () -> Unit,
     onConnectGlassesMock: () -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         Text("核心组件连接", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         GlassesConnectionCard(data = glassesData, onConnectReal = onConnectGlassesReal, onConnectMock = onConnectGlassesMock)
         ConnectionCard(title = "PMS 3.0 系统", description = "后台业务同步", isConnected = pmsConnected, onConnect = onConnectPms)
@@ -463,8 +460,8 @@ fun GlassesConnectionCard(data: BleManager.GlassesData, onConnectReal: () -> Uni
         Column(modifier = Modifier.padding(16.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    imageVector = if (isConnected) Icons.Default.Info else Icons.Default.Warning, 
-                    contentDescription = null, 
+                    imageVector = if (isConnected) Icons.Default.Info else Icons.Default.Warning,
+                    contentDescription = null,
                     tint = if (isConnected) Color(0xFF4CAF50) else Color.Gray,
                     modifier = Modifier.size(40.dp)
                 )
@@ -472,7 +469,7 @@ fun GlassesConnectionCard(data: BleManager.GlassesData, onConnectReal: () -> Uni
                 Column(modifier = Modifier.weight(1f)) {
                     Text("AI 智能眼镜", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     Text(
-                        text = when(data.status) {
+                        text = when (data.status) {
                             BleManager.DeviceStatus.CONNECTING -> "正在寻找设备并握手..."
                             BleManager.DeviceStatus.READY -> "已连接: ${data.deviceName ?: "未知"} | 电量: ${data.battery}%"
                             BleManager.DeviceStatus.ERROR -> "连接出错: ${data.error}"
@@ -483,11 +480,15 @@ fun GlassesConnectionCard(data: BleManager.GlassesData, onConnectReal: () -> Uni
                     )
                 }
             }
-            
+
             if (data.status == BleManager.DeviceStatus.READY) {
                 LinearProgressIndicator(
                     progress = { data.battery / 100f },
-                    modifier = Modifier.padding(vertical = 12.dp).fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                    modifier = Modifier
+                        .padding(vertical = 12.dp)
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp)),
                     color = if (data.battery > 20) Color(0xFF4CAF50) else Color.Red
                 )
             } else {
@@ -497,23 +498,18 @@ fun GlassesConnectionCard(data: BleManager.GlassesData, onConnectReal: () -> Uni
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 if (isConnected || data.status == BleManager.DeviceStatus.CONNECTING) {
                     Button(
-                        onClick = onConnectReal, // 统一调用断开逻辑
+                        onClick = onConnectReal,
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF44336))
                     ) {
                         Text(if (data.status == BleManager.DeviceStatus.CONNECTING) "取消" else "断开", fontSize = 12.sp)
                     }
                 } else {
-                    OutlinedButton(
-                        onClick = onConnectReal,
-                        modifier = Modifier.padding(end = 8.dp)
-                    ) {
+                    OutlinedButton(onClick = onConnectReal, modifier = Modifier.padding(end = 8.dp)) {
                         Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("真实连接", fontSize = 12.sp)
                     }
-                    Button(
-                        onClick = onConnectMock
-                    ) {
+                    Button(onClick = onConnectMock) {
                         Icon(Icons.Default.Build, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("模拟连接", fontSize = 12.sp)
@@ -524,52 +520,160 @@ fun GlassesConnectionCard(data: BleManager.GlassesData, onConnectReal: () -> Uni
     }
 }
 
+// ─── BLE 扫描 Tab ─────────────────────────────────────────────────────────────
+
 @Composable
-fun BleScanTab(isScanning: Boolean, devices: SnapshotStateList<BleDeviceMock>, canTest: Boolean, onToggleScan: () -> Unit) {
+fun BleScanTab(
+    isScanning: Boolean,
+    devices: List<BleDevice>,
+    canScan: Boolean,
+    onToggleScan: () -> Unit
+) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("BLE 扫描发现", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.weight(1f))
-            Button(onClick = onToggleScan, enabled = canTest || isScanning) {
+            if (isScanning) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp).padding(end = 8.dp))
+            }
+            Button(onClick = onToggleScan) {
                 Text(if (isScanning) "停止" else "开始扫描")
             }
         }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = if (isScanning) "正在扫描... 发现 ${devices.size} 台设备" else "共发现 ${devices.size} 台设备",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.Gray
+        )
         LazyColumn(modifier = Modifier.fillMaxSize().padding(top = 8.dp)) {
-            items(devices) { device ->
-                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    Row(modifier = Modifier.padding(12.dp)) {
-                        Column {
-                            Text(device.name, fontWeight = FontWeight.Bold)
-                            Text(device.mac, style = MaterialTheme.typography.bodySmall)
+            if (devices.isEmpty() && isScanning) {
+                item {
+                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator()
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("搜索附近 BLE 设备中...", color = Color.Gray)
                         }
-                        Spacer(modifier = Modifier.weight(1f))
-                        Text("${device.rssi} dBm")
                     }
                 }
+            }
+            items(devices, key = { it.address }) { device ->
+                BleDeviceCard(device = device)
             }
         }
     }
 }
 
 @Composable
-fun UwbRangingTab(isRanging: Boolean, distance: Double, aoa: Int, canTest: Boolean, onToggleRanging: () -> Unit) {
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("UWB 实时测距", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(32.dp))
-        Box(modifier = Modifier.size(200.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(String.format(Locale.US, "%.2f", distance), style = MaterialTheme.typography.displayMedium)
-                Text("米 (m)")
+fun BleDeviceCard(device: BleDevice) {
+    val rssiColor = when {
+        device.rssi >= -60 -> Color(0xFF4CAF50)  // 强信号
+        device.rssi >= -80 -> Color(0xFFFF9800)  // 中信号
+        else -> Color(0xFFF44336)                 // 弱信号
+    }
+    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(rssiColor))
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(device.name, fontWeight = FontWeight.Bold)
+                Text(device.address, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
             }
-        }
-        Spacer(modifier = Modifier.height(24.dp))
-        Text("AoA 方位角: $aoa°")
-        Spacer(modifier = Modifier.height(32.dp))
-        Button(onClick = onToggleRanging, enabled = canTest || isRanging, modifier = Modifier.fillMaxWidth()) {
-            Text(if (isRanging) "停止测距" else "开始测距")
+            Column(horizontalAlignment = Alignment.End) {
+                Text("${device.rssi} dBm", color = rssiColor, fontWeight = FontWeight.Bold)
+                Text(
+                    if (device.isConnectable) "可连接" else "仅广播",
+                    fontSize = 10.sp,
+                    color = Color.Gray
+                )
+            }
         }
     }
 }
+
+// ─── UWB 测距 Tab ─────────────────────────────────────────────────────────────
+
+@Composable
+fun UwbRangingTab(
+    uwbState: UwbState,
+    canTest: Boolean,
+    onToggleRanging: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("UWB 实时测距", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.weight(1f))
+            if (uwbState.isSimulated) {
+                Surface(
+                    color = Color(0xFFFF9800),
+                    shape = RoundedCornerShape(4.dp)
+                ) {
+                    Text(
+                        "模拟模式",
+                        fontSize = 10.sp,
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            } else if (uwbState.isSupported) {
+                Surface(
+                    color = Color(0xFF4CAF50),
+                    shape = RoundedCornerShape(4.dp)
+                ) {
+                    Text(
+                        "硬件 UWB",
+                        fontSize = 10.sp,
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        Box(
+            modifier = Modifier
+                .size(200.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    String.format(Locale.US, "%.2f", uwbState.distanceMeters),
+                    style = MaterialTheme.typography.displayMedium
+                )
+                Text("米 (m)")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(String.format(Locale.US, "AoA 方位角: %.1f°", uwbState.azimuthDegrees))
+        Spacer(modifier = Modifier.height(8.dp))
+        if (!uwbState.isSupported) {
+            Text(
+                "⚠ 当前设备不支持 UWB，数据为模拟值",
+                fontSize = 12.sp,
+                color = Color(0xFFFF9800)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+        Button(
+            onClick = onToggleRanging,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(if (uwbState.isRanging) "停止测距" else "开始测距")
+        }
+    }
+}
+
+// ─── 通用组件 ─────────────────────────────────────────────────────────────────
 
 @Composable
 fun StatisticCard(label: String, value: String, color: Color) {
@@ -587,12 +691,22 @@ fun StatisticCard(label: String, value: String, color: Color) {
 fun ConnectionCard(title: String, description: String, isConnected: Boolean, onConnect: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = if (isConnected) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isConnected) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surface
+        ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Row(modifier = Modifier.padding(12.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.padding(12.dp).fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                Icon(imageVector = if (isConnected) Icons.Default.CheckCircle else Icons.Default.Warning, contentDescription = null, tint = if (isConnected) Color(0xFF4CAF50) else Color(0xFFB0BEC5))
+                Icon(
+                    imageVector = if (isConnected) Icons.Default.CheckCircle else Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = if (isConnected) Color(0xFF4CAF50) else Color(0xFFB0BEC5)
+                )
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Text(title, fontWeight = FontWeight.Bold)
@@ -613,5 +727,3 @@ fun InfoBox(label: String, value: String) {
         Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
     }
 }
-
-data class BleDeviceMock(val name: String, val mac: String, val rssi: Int)

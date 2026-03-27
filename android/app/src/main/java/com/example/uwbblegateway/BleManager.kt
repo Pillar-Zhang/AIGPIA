@@ -209,5 +209,36 @@ class BleManager(private val context: Context) {
                 _glassesState.value = _glassesState.value.copy(battery = batteryLevel)
             }
         }
+    }  // end of gattCallback
+
+    /**
+     * 将当前定位坐标 + 下一导航点通过 BLE 下发眼镜端
+     */
+    @SuppressLint("MissingPermission")
+    fun sendNavData(position: Position2D, nextPoint: NavPoint?) {
+        val payload = buildString {
+            append("{\"type\":\"nav\",")
+            append("\"x\":${position.x},\"y\":${position.y},")
+            append("\"conf\":${position.confidence}")
+            nextPoint?.let { pt ->
+                append(",\"next\":{\"id\":\"${pt.id}\",\"label\":\"${pt.label}\",\"x\":${pt.x},\"y\":${pt.y}}")
+            }
+            append("}")
+        }
+        // 真实连接：GATT 写入第一个可写特征值
+        bluetoothGatt?.let { gatt ->
+            gatt.services.forEach { svc ->
+                svc.characteristics.firstOrNull {
+                    it.properties and BluetoothGattCharacteristic.PROPERTY_WRITE != 0
+                }?.let { char ->
+                    char.value = payload.toByteArray(Charsets.UTF_8)
+                    gatt.writeCharacteristic(char)
+                    return@let
+                }
+            }
+        }
+        // 模拟连接：通过 WebSocket 发送
+        mockWebSocket?.send(payload)
+        Log.d(TAG, "Nav data sent: $payload")
     }
 }
