@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "name": "uwb-ble-gateway-api",
+  "builds": [
+    {
+      "src": "server.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/server.js"
+    }
+  ]
+}

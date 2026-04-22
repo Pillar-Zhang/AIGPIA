@@ -1,0 +1,27 @@
+# ====================
+# Node.js & Server
+# ====================
+node_modules/
+server/node_modules/
+server/db/
+db/
+*.log
+
+# ====================
+# Android & Gradle
+# ====================
+*.iml
+.gradle/
+local.properties
+.idea/
+build/
+captures/
+.externalNativeBuild/
+.DS_Store
+*.hprof
+
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
